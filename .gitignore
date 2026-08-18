@@ -1,0 +1,13 @@
+# Node & Dependencies
+node_modules/
+backend/node_modules/
+
+# Secrets & Environment
+.env
+backend/.env
+.metaapi/
+backend/.metaapi/
+
+# Zips & OS files
+*.zip
+.DS_Store

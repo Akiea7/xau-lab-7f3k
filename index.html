@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script id="debugger">
+  // التقاط الأخطاء البرمجية العادية
+  window.onerror = function(msg, url, line) {
+    alert("🚨 خطأ في الكود:\n" + msg + "\nالسطر: " + line);
+    return false;
+  };
+  // التقاط أخطاء الاتصال والوعود (Promises)
+  window.onunhandledrejection = function(e) {
+    alert("🚨 خطأ مخفي:\n" + (e.reason ? (e.reason.message || e.reason) : "غير معروف"));
+  };
+</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAU Precision</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0B0E14; color: #e2e8f0; }
+    .bg-card { background-color: #11151F; }
+    .bg-panel { background-color: #171C29; }
+    .border-panel { border-color: #1F2637; }
+    .text-gold { color: #F0B90B; }
+    .border-gold { border-color: #F0B90B; }
+    .bg-gold { background-color: #F0B90B; }
+    .text-buy { color: #22c55e; }
+    .text-sell { color: #ef4444; }
+    .text-lab { color: #a855f7; }
+    .text-neutral { color: #60a5fa; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+  
+  <!-- Header -->
+  <header class="bg-card border-b border-panel p-4 text-center">
+    <h1 class="text-xl font-bold text-gold">XAU Precision</h1>
+    <p class="text-xs text-slate-400 mt-1">Market Analysis & Strategy Lab</p>
+  </header>
+
+  <!-- Tabs Navigation -->
+  <nav class="flex overflow-x-auto bg-card border-b border-panel hide-scrollbar">
+    <button class="tabBtn flex-1 min-w-[80px] py-3 text-gold border-b-2 border-gold font-bold text-xs" data-tab="live">LIVE 📡</button>
+    <button class="tabBtn flex-1 min-w-[90px] py-3 text-slate-400 border-b-2 border-transparent font-bold text-xs" data-tab="backtest">BACKTEST 📊</button>
+    <button class="tabBtn flex-1 min-w-[70px] py-3 text-slate-400 border-b-2 border-transparent font-bold text-xs" data-tab="lab">LAB 🔬</button>
+    <button class="tabBtn flex-1 min-w-[80px] py-3 text-slate-400 border-b-2 border-transparent font-bold text-xs" data-tab="replay">REPLAY 🎬</button>
+    <button class="tabBtn flex-1 min-w-[90px] py-3 text-slate-400 border-b-2 border-transparent font-bold text-xs" data-tab="journal">JOURNAL 📒</button>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-4 overflow-y-auto">
+    
+    <!-- 1. LIVE TAB -->
+    <div id="live" class="tabContent block">
+      <div class="flex justify-between items-center mb-4 bg-panel p-3 rounded border border-panel">
+        <div>
+           <span class="text-xs text-slate-400 block mb-1">XAU/USD</span>
+           <span id="hPrice" class="text-lg font-bold text-gold">---.--</span>
+        </div>
+        <div class="text-center">
+           <span class="text-xs text-slate-400 block mb-1">Balance</span>
+           <span id="hBal" class="text-sm font-bold text-neutral">$---</span>
+        </div>
+        <div class="text-left">
+           <span class="text-xs text-slate-400 block mb-1">Status</span>
+           <span id="hSrc" class="text-xs font-bold text-slate-500">⚪ بانتظار الاتصال</span>
+        </div>
+      </div>
+      
+      <!-- Chart -->
+      <div class="bg-panel h-64 rounded border border-panel mb-4 relative" id="chartMain"></div>
+
+      <!-- Signal Engine Card -->
+      <div class="bg-panel rounded border border-panel p-4 text-center">
+        <h2 class="text-xs text-slate-400 mb-3 border-b border-panel pb-2 tracking-widest">SIGNAL ENGINE</h2>
+        <div id="signalContent">
+           <div class="text-slate-500 py-6 text-sm">بانتظار إشارة من المحرك... ⚪</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. BACKTEST TAB -->
+    <div id="backtest" class="tabContent hidden">
+      <div class="bg-panel rounded border border-panel p-4 mb-4">
+         <h2 class="text-sm text-slate-400 mb-3 border-b border-panel pb-2">إعدادات الاختبار</h2>
+         <div class="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
+            <div>Balance:<br><span class="text-gold font-bold mt-1 inline-block">$10,000</span></div>
+            <div>Risk:<br><span class="text-gold font-bold mt-1 inline-block">1%</span></div>
+            <div>RR:<br><span class="text-gold font-bold mt-1 inline-block">2.0</span></div>
+            <div>Max Trades/Day:<br><span class="text-gold font-bold mt-1 inline-block">4</span></div>
+         </div>
+         <button id="btnRunBT" class="w-full mt-5 bg-neutral text-black font-bold py-2 rounded text-sm hover:opacity-90">RUN BACKTEST ▶</button>
+      </div>
+      <div class="bg-panel rounded border border-panel p-4">
+         <div id="btResultsBox" class="hidden">
+       <div class="grid grid-cols-2 gap-4 text-center mb-4 border-b border-panel pb-4">
+          <div><span class="text-slate-400 text-xs block">Net Profit</span><span id="btNet" class="font-bold text-lg">--</span></div>
+          <div><span class="text-slate-400 text-xs block">Win Rate</span><span id="btWR" class="font-bold text-lg text-gold">--%</span></div>
+          <div><span class="text-slate-400 text-xs block">Trades</span><span id="btTrades" class="font-bold text-lg">--</span></div>
+          <div><span class="text-slate-400 text-xs block">Max DD</span><span id="btDD" class="font-bold text-lg text-sell">--%</span></div>
+       </div>
+       <div class="overflow-y-auto max-h-40">
+         <table class="w-full text-xs text-center border-collapse">
+           <thead><tr class="text-slate-500 border-b border-panel"><th class="pb-2">Time</th><th class="pb-2">Dir</th><th class="pb-2">P&L</th></tr></thead>
+           <tbody id="btTradesList"></tbody>
+         </table>
+       </div>
+    </div>
+    <div id="btWaiting" class="text-center text-slate-500 py-8 text-sm">قم بتشغيل الاختبار لعرض النتائج <br> والـ Equity Curve</div>
+      </div>
+    </div>
+
+    <!-- 3. LAB TAB -->
+    <div id="lab" class="tabContent hidden">
+      <div class="bg-panel rounded border border-panel p-4 mb-4 border-r-2 border-r-purple-500">
+         <h2 class="text-sm text-lab mb-3 font-bold">مختبر الاستراتيجية 🔬</h2>
+         <div class="text-xs mb-4">
+           <p class="text-slate-400 mb-2">الأنظمة (Regimes):</p>
+           <div class="flex flex-wrap gap-2">
+             <span class="bg-[#2d1b4e] text-[#d8b4fe] px-2 py-1 rounded border border-[#4c1d95]">☑ STRONG UP</span>
+             <span class="bg-[#2d1b4e] text-[#d8b4fe] px-2 py-1 rounded border border-[#4c1d95]">☑ UP</span>
+             <span class="bg-[#1F2637] text-slate-400 px-2 py-1 rounded border border-panel">☐ RANGE</span>
+           </div>
+         </div>
+         <button id="btnRunLab" class="w-full bg-[#9333ea] text-white font-bold py-2 rounded text-sm hover:bg-[#7e22ce]">RUN EXPERIMENT 🧪</button>
+      </div>
+      <div class="bg-panel rounded border border-panel p-4">
+         <div id="labResults" class="hidden grid grid-cols-3 gap-2 text-center text-xs">
+       <div class="bg-[#2d1b4e] border border-[#4c1d95] rounded p-2">
+         <div class="text-[#d8b4fe] font-bold mb-2">A (كلاسيكي)</div>
+         <div class="mb-1 text-slate-300">RR 1:2.0</div>
+         <div id="labNetA" class="font-bold text-lg">--</div>
+         <div id="labWrA" class="text-gold">--%</div>
+       </div>
+       <div class="bg-panel border border-panel rounded p-2">
+         <div class="text-slate-400 font-bold mb-2">B (سريع)</div>
+         <div class="mb-1 text-slate-300">RR 1:1.5</div>
+         <div id="labNetB" class="font-bold text-lg">--</div>
+         <div id="labWrB" class="text-gold">--%</div>
+       </div>
+       <div class="bg-panel border border-panel rounded p-2">
+         <div class="text-slate-400 font-bold mb-2">C (قناص)</div>
+         <div class="mb-1 text-slate-300">RR 1:3.0</div>
+         <div id="labNetC" class="font-bold text-lg">--</div>
+         <div id="labWrC" class="text-gold">--%</div>
+       </div>
+    </div>
+    <div id="labWaiting" class="text-center text-slate-500 py-8 text-sm">اضغط على الزر لاختبار 3 استراتيجيات <br> بـ Reward/Risk مختلف</div>
+      </div>
+    </div>
+
+    <!-- 4. REPLAY TAB -->
+    <div id="replay" class="tabContent hidden">
+   <div class="bg-panel rounded border border-panel p-4 text-center">
+     <h2 class="text-sm text-slate-400 mb-3 border-b border-panel pb-2">التدريب (Replay) 🎬</h2>
+     <div id="replaySetup">
+        <p class="text-xs text-slate-500 mb-4">سيتم إخفاء المستقبل واختبار قدرتك على قراءة الشارت.</p>
+        <button id="btnStartReplay" class="w-full bg-[#9333ea] text-white font-bold py-2 rounded text-sm hover:bg-[#7e22ce]">بدء جلسة جديدة ▶</button>
+     </div>
+     <div id="replayActive" class="hidden">
+        <div id="chartReplay" class="bg-[#0B0E14] h-64 rounded border border-panel mb-4 relative overflow-hidden"></div>
+        <div class="flex gap-2">
+           <button id="btnRepBuy" class="flex-1 text-white font-bold py-3 rounded text-sm bg-green-600 hover:bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]">BUY 🟢</button>
+           <button id="btnRepSell" class="flex-1 text-white font-bold py-3 rounded text-sm bg-red-600 hover:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]">SELL 🔴</button>
+        </div>
+        <div id="replayResult" class="mt-4 text-sm font-bold hidden p-3 rounded"></div>
+     </div>
+   </div>
+</div>
+
+<!-- 5. JOURNAL TAB -->
+    <div id="journal" class="tabContent hidden">
+   <div class="bg-panel rounded border border-panel p-4">
+     <h2 class="text-sm text-slate-400 mb-3 border-b border-panel pb-2">سجل الصفقات 📒</h2>
+     <div class="overflow-x-auto">
+       <table class="w-full text-xs text-center border-collapse">
+         <thead>
+           <tr class="border-b border-panel text-slate-500">
+              <th class="pb-2 font-normal">Time</th>
+              <th class="pb-2 font-normal">Dir</th>
+              <th class="pb-2 font-normal">Entry</th>
+              <th class="pb-2 font-normal">P&L</th>
+           </tr>
+         </thead>
+         <tbody id="journalBody">
+           <tr><td colspan="4" class="py-6 text-slate-500">لا توجد صفقات مسجلة حالياً</td></tr>
+         </tbody>
+       </table>
+     </div>
+   </div>
+</div>
+</main>
+  <script type="module" src="js/app.js?v=1787014155999"></script>
+
+<script id="tabLogic">
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tabBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const targetId = e.currentTarget.getAttribute('data-tab');
+        // تغيير الألوان
+        document.querySelectorAll('.tabBtn').forEach(b => {
+           b.classList.remove('border-gold', 'text-gold');
+           b.classList.add('border-transparent', 'text-slate-400');
+        });
+        e.currentTarget.classList.remove('border-transparent', 'text-slate-400');
+        e.currentTarget.classList.add('border-gold', 'text-gold');
+        
+        // إخفاء/إظهار المحتوى
+        document.querySelectorAll('.tabContent').forEach(tc => {
+            tc.classList.add('hidden');
+            tc.classList.remove('block');
+        });
+        const targetEl = document.getElementById(targetId);
+        if(targetEl) {
+            targetEl.classList.remove('hidden');
+            targetEl.classList.add('block');
+        }
+      });
+    });
+  });
+</script>
+</body>
+</html>
