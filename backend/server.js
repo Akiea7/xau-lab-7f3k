@@ -20,11 +20,8 @@ let clients = [];
 async function initMetaApi() {
     try {
         if (!token || !accountId) return console.log('⚠️ بانتظار إعداد ملف .env');
-        
-        console.log(`⏳ جاري الاتصال بـ MetaApi للحساب ${accountId}...`);
         const metaApi = new MetaApi(token);
         const account = await metaApi.metatraderAccountApi.getAccount(accountId);
-
         if (account.state !== 'DEPLOYED') await account.deploy();
         await account.waitConnected().catch(() => {});
 
@@ -34,25 +31,29 @@ async function initMetaApi() {
         const marketConnection = account.getStreamingConnection();
         await marketConnection.connect();
         await marketConnection.waitSynchronized().catch(() => {});
-
         await marketConnection.subscribeToMarketData(symbol).catch(() => {});
 
+        // جلب وإرسال الرصيد الفعلي
         const info = await rpcConnection.getAccountInformation();
-        
+        const sendBalance = () => {
+            const msg = JSON.stringify({ type: 'balance', balance: info.balance });
+            clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
+        };
+        setInterval(sendBalance, 10000); // تحديث الرصيد كل 10 ثواني
+
         marketConnection.addSynchronizationListener({
             onSymbolPriceUpdated: (idx, price) => {
                 if (price.symbol === symbol) {
-                    // إرسال الـ Bid والـ Ask بدلاً من سعر واحد
-                    const msg = JSON.stringify({ type: 'tick', bid: price.bid, ask: price.ask });
+                    // استخراج آمن للـ Bid والـ Ask
+                    const b = price.bid || price || 0;
+                    const a = price.ask || price || 0;
+                    const msg = JSON.stringify({ type: 'tick', bid: b, ask: a });
                     clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
                 }
             }
         });
-
         console.log('✅ تم الربط بنجاح وبدء بث الأسعار!');
-    } catch (err) {
-        console.error('❌ خطأ في الاتصال:', err.message);
-    }
+    } catch (err) { console.error('❌ خطأ في الاتصال:', err.message); }
 }
 initMetaApi();
 

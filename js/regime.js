@@ -15,7 +15,7 @@ export function detectRegime(indicators, currentIndex) {
     // 1. تحليل تقارب/تباعد المتوسطات لمعرفة هل السوق عرضي (Range)
     // إذا كانت المسافة بين المتوسطات أقل من نصف حجم الشمعة المعتاد (ATR)، فالسوق متداخل
     const emaDistance = Math.abs(e21 - e50);
-    const isRange = emaDistance < (atr * 0.5) || (rsi > 45 && rsi < 55);
+    const isRange = emaDistance < (atr * 0.5);
 
     // 2. تحليل الاتجاه الأساسي (Trend)
     const isBullish = e21 > e50;

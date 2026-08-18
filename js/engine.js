@@ -53,14 +53,7 @@ export function detectSignal(data, indicators, index, settings = { rr: 2.0 }) {
     const isNearEma21Buy = Math.abs(bar.l - e21) < (atr * 0.5); // السعر صحح واقترب من المتوسط
 
     if (regime.includes('UP') && isNearEma21Buy && rsi <= 50 && (pa === 'BULL_ENGULFING' || pa === 'BULL_PINBAR')) {
-        let sl = bar.l - (atr * 1.0); // حماية بمسافة ATR كاملة تحت القاع
-        let tp = bar.c + (Math.abs(bar.c - sl) * settings.rr);
-        return { 
-            side: 'BUY', 
-            entry: bar.c, 
-            sl, 
-            tp, 
-            reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
+        let slDist = (atr * 1.0); let tpDist = slDist * settings.rr; return { side: 'BUY', entry: bar.c, slDist, tpDist, reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
         };
     }
 
@@ -71,14 +64,7 @@ export function detectSignal(data, indicators, index, settings = { rr: 2.0 }) {
     const isNearEma21Sell = Math.abs(bar.h - e21) < (atr * 0.5);
 
     if (regime.includes('DOWN') && isNearEma21Sell && rsi >= 50 && (pa === 'BEAR_ENGULFING' || pa === 'BEAR_PINBAR')) {
-        let sl = bar.h + (atr * 1.0); // حماية بمسافة ATR كاملة فوق القمة
-        let tp = bar.c - (Math.abs(sl - bar.c) * settings.rr);
-        return { 
-            side: 'SELL', 
-            entry: bar.c, 
-            sl, 
-            tp, 
-            reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
+        let slDist = (atr * 1.0); let tpDist = slDist * settings.rr; return { side: 'SELL', entry: bar.c, slDist, tpDist, reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
         };
     }
 
