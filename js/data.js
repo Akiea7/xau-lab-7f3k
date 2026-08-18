@@ -1,53 +1,74 @@
+/**
+ * 📊 نظام جلب البيانات (Data Provider)
+ * تم التخلص من PAXG - النظام الآن يجلب XAU/USD حقيقي
+ */
 export let M5 = [];
 
 export async function loadHistoricalData() {
-  return new Promise(async (resolve) => {
     try {
-      // 🚀 الخدعة الاحترافية: استخدام PAXGUSDT كممثل دقيق جداً لـ XAUUSD
-      // هذا يعطينا 1000 شمعة حقيقية مجاناً وبدون مشاكل الاتصال
-      const res = await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=5m&limit=1000');
-      const data = await res.json();
-      
-      M5 = data.map(d => ({
-        t: d[0],                  // وقت الافتتاح
-        o: parseFloat(d[1]),      // سعر الافتتاح
-        h: parseFloat(d[2]),      // أعلى سعر
-        l: parseFloat(d[3]),      // أدنى سعر
-        c: parseFloat(d[4]),      // سعر الإغلاق
-        v: parseFloat(d[5])       // الفوليوم
-      }));
-      
-      console.log(`✅ تم جلب ${M5.length} شمعة تاريخية حقيقية بنجاح.`);
-      resolve(M5);
-    } catch (e) {
-      console.error("❌ خطأ في جلب البيانات:", e);
-      resolve([]);
+        // نستخدم Yahoo Finance لجلب بيانات XAUUSD=X الحقيقية
+        // ونمررها عبر AllOrigins (Proxy) لتجاوز حظر الـ CORS في المتصفحات (GitHub Pages)
+        const targetUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/XAUUSD=X?interval=5m&range=5d';
+        const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(targetUrl);
+        
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error('فشل الاتصال بمزود بيانات الذهب');
+        
+        const proxyData = await response.json();
+        
+        // البيانات تأتي كنص داخل contents بسبب البروكسي
+        const data = JSON.parse(proxyData.contents);
+
+        if (!data || !data.chart || !data.chart.result) {
+            throw new Error('تنسيق البيانات غير صالح');
+        }
+
+        const result = data.chart.result[0];
+        const timestamps = result.timestamp;
+        const quote = result.indicators.quote[0];
+
+        M5 = [];
+        for (let i = 0; i < timestamps.length; i++) {
+            // تخطي الفترات اللي السوق بيها مغلق (Null data)
+            if (quote.close[i] === null) continue;
+            
+            M5.push({
+                t: timestamps[i] * 1000, // تحويل الثواني إلى ملي ثانية لتطابق جافاسكربت
+                o: quote.open[i],
+                h: quote.high[i],
+                l: quote.low[i],
+                c: quote.close[i],
+                v: quote.volume[i] || 0
+            });
+        }
+        
+        console.log(`✅ تم تحميل ${M5.length} شمعة M5 حقيقية لـ XAU/USD`);
+        return M5;
+        
+    } catch (error) {
+        console.error('[DATA FETCH ERROR]', error.message);
+        return [];
     }
-  });
 }
 
-// 🕒 دالة التجميع (Aggregation) الدقيقة المبنية على الوقت الفعلي
+/**
+ * 🔄 دالة تجميع الشموع (Timeframe Aggregator)
+ * تحول شموع الـ 5 دقائق إلى 15 دقيقة وساعة بدقة
+ */
 export function agg(bars, factor) {
-  // factor: 3 = M15, 12 = H1 (لأن الأساس هو M5)
-  let timeframeMs = factor * 5 * 60 * 1000;
-  let res = [];
-  let currentBar = null;
-  
-  for(let i = 0; i < bars.length; i++) {
-    let b = bars[i];
-    // تقريب الوقت لبداية التايم فريم (مثلاً: 10:00, 10:15, 10:30)
-    let normalizedTime = Math.floor(b.t / timeframeMs) * timeframeMs;
-    
-    if(!currentBar || currentBar.t !== normalizedTime) {
-      if(currentBar) res.push(currentBar);
-      currentBar = { t: normalizedTime, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v };
-    } else {
-      currentBar.h = Math.max(currentBar.h, b.h);
-      currentBar.l = Math.min(currentBar.l, b.l);
-      currentBar.c = b.c;
-      currentBar.v += b.v;
+    let out = [];
+    for (let i = 0; i < bars.length; i += factor) {
+        let chunk = bars.slice(i, i + factor);
+        if (chunk.length === factor) {
+            out.push({
+                t: chunk[0].t,
+                o: chunk[0].o,
+                h: Math.max(...chunk.map(b => b.h)),
+                l: Math.min(...chunk.map(b => b.l)),
+                c: chunk[chunk.length - 1].c,
+                v: chunk.reduce((sum, b) => sum + b.v, 0)
+            });
+        }
     }
-  }
-  if(currentBar) res.push(currentBar);
-  return res;
+    return out;
 }
