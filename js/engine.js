@@ -1,30 +1,85 @@
 import { detectRegime } from './regime.js';
 
+/**
+ * 🔍 دالة مساعدة لاكتشاف نماذج البرايس أكشن (Price Action)
+ */
+function getPriceAction(bar, prevBar, atr) {
+    const body = Math.abs(bar.c - bar.o);
+    const wickUp = bar.h - Math.max(bar.c, bar.o);
+    const wickDown = Math.min(bar.c, bar.o) - bar.l;
+    const totalSize = bar.h - bar.l;
+
+    // 1. الشموع الابتلاعية
+    const isBullishEngulfing = bar.c > bar.o && prevBar.c < prevBar.o && bar.c > prevBar.o && bar.o < prevBar.c;
+    const isBearishEngulfing = bar.c < bar.o && prevBar.c > prevBar.o && bar.c < prevBar.o && bar.o > prevBar.c;
+
+    // 2. شموع الرفض السعري (Pinbar / Hammer)
+    // الذيل يمثل ضعف حجم الجسم، والذيل المعاكس صغير جداً، وحجم الشمعة كافٍ (نصف ATR على الأقل)
+    const isBullishPinbar = wickDown > (body * 2) && wickUp < body && totalSize > (atr * 0.5);
+    const isBearishPinbar = wickUp > (body * 2) && wickDown < body && totalSize > (atr * 0.5);
+
+    if (isBullishEngulfing) return 'BULL_ENGULFING';
+    if (isBearishEngulfing) return 'BEAR_ENGULFING';
+    if (isBullishPinbar) return 'BULL_PINBAR';
+    if (isBearishPinbar) return 'BEAR_PINBAR';
+    return 'NONE';
+}
+
+/**
+ * 🧠 محرك الإشارات (XAU Precision Core Strategy)
+ */
 export function detectSignal(data, indicators, index, settings = { rr: 2.0 }) {
-    if (index < 50) return null; // تجاهل التحمية
+    if (index < 50) return null; // تجاهل منطقة التحمية
 
     const bar = data[index];
+    const prevBar = data[index - 1];
     const ind = indicators[index];
+    
     if (!ind || !ind.isWarm) return null;
 
     const regime = detectRegime(indicators, index);
     const { e21, e50, rsi, atr } = ind;
     
-    // منع التداول في التذبذب
-    if (regime.includes('RANGE')) return null;
+    // 1. فلتر البيئة: لا نتداول في التذبذب العرضي إطلاقاً
+    if (regime.includes('RANGE') || regime === 'UNKNOWN') return null;
 
-    // استراتيجية شراء مبسطة: ترند صاعد + السعر فوق EMA21 + RSI مريح (أقل من 55)
-    if (regime.includes('UP') && bar.c > e21 && rsi < 55) {
-        let sl = bar.l - (atr * 1.0); // الوقف أسفل الشمعة بـ 1 ATR
+    // 2. رصد البرايس أكشن الحالي
+    const pa = getPriceAction(bar, prevBar, atr);
+
+    // ==========================================
+    // 🟢 استراتيجية القناص الشرائية (Buy Setup)
+    // ==========================================
+    // الشرط: ترند صاعد + تصحيح يلامس منطقة EMA21 + الزخم هدأ (RSI < 50) + ظهر نموذج شرائي
+    const isNearEma21Buy = Math.abs(bar.l - e21) < (atr * 0.5); // السعر صحح واقترب من المتوسط
+
+    if (regime.includes('UP') && isNearEma21Buy && rsi <= 50 && (pa === 'BULL_ENGULFING' || pa === 'BULL_PINBAR')) {
+        let sl = bar.l - (atr * 1.0); // حماية بمسافة ATR كاملة تحت القاع
         let tp = bar.c + (Math.abs(bar.c - sl) * settings.rr);
-        return { side: 'BUY', entry: bar.c, sl, tp, reason: `Regime: ${regime}, Trend Pullback` };
+        return { 
+            side: 'BUY', 
+            entry: bar.c, 
+            sl, 
+            tp, 
+            reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
+        };
     }
 
-    // استراتيجية بيع مبسطة: ترند هابط + السعر جوة EMA21 + RSI مريح (أكبر من 45)
-    if (regime.includes('DOWN') && bar.c < e21 && rsi > 45) {
-        let sl = bar.h + (atr * 1.0); // الوقف أعلى الشمعة بـ 1 ATR
+    // ==========================================
+    // 🔴 استراتيجية القناص البيعية (Sell Setup)
+    // ==========================================
+    // الشرط: ترند هابط + تصحيح صاعد يلامس EMA21 + الزخم ارتفع (RSI > 50) + ظهر نموذج بيعي
+    const isNearEma21Sell = Math.abs(bar.h - e21) < (atr * 0.5);
+
+    if (regime.includes('DOWN') && isNearEma21Sell && rsi >= 50 && (pa === 'BEAR_ENGULFING' || pa === 'BEAR_PINBAR')) {
+        let sl = bar.h + (atr * 1.0); // حماية بمسافة ATR كاملة فوق القمة
         let tp = bar.c - (Math.abs(sl - bar.c) * settings.rr);
-        return { side: 'SELL', entry: bar.c, sl, tp, reason: `Regime: ${regime}, Trend Pullback` };
+        return { 
+            side: 'SELL', 
+            entry: bar.c, 
+            sl, 
+            tp, 
+            reason: `Regime: ${regime} | PA: ${pa} | RSI: ${rsi.toFixed(0)}` 
+        };
     }
 
     return null;
