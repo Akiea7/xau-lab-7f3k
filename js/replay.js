@@ -107,7 +107,7 @@ export function executeReplayTrade(side) {
  * 📈 رسم الشارت المقطوع (إخفاء المستقبل)
  */
 function drawReplayChart() {
-    const chartDiv = document.getElementById('chartMain');
+    const chartDiv = document.getElementById('chartReplay');
     if (chartDiv && rData.length > 0) {
         // اقتطاع البيانات من البداية وحتى المؤشر الحالي فقط
         const currentData = rData.slice(0, state.index + 1);

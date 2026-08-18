@@ -33,7 +33,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch(err) { console.error('[DATA LOAD ERROR]', err); }
 
-    // تشغيل الاتصال المباشر (اللايف)
     setTimeout(startLiveStream, 2000);
 });
 
@@ -43,83 +42,65 @@ function drawMain() {
     }
 }
 
-// ربط جميع الأزرار (Backtest, Lab, Replay)
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
     const text = btn.textContent.trim().toUpperCase();
 
-    // 1. Backtest
+    // تشغيل الباكتيست
     if (text.includes('RUN BACKTEST')) {
         const original = btn.innerHTML;
         btn.innerText = 'جاري الحساب... ⏳';
         setTimeout(() => {
             const res = runProfessionalBacktest(M5, I5, { balance: 10000, riskPct: 1.0, rr: 2.0 });
-            renderBacktestResults(btn, res);
+            renderBacktestResults(res);
             btn.innerHTML = original;
         }, 100);
     }
 
-    // 2. Lab
+    // تشغيل المختبر
     if (text.includes('RUN EXPERIMENT')) {
         const original = btn.innerHTML;
         btn.innerText = 'جاري التجارب... 🧪';
         setTimeout(() => {
             const res = runLabExperiments(M5, I5);
-            renderLabResults(btn, res);
+            renderLabResults(res);
             btn.innerHTML = original;
         }, 100);
     }
 
-    // 3. Replay
-    if (text.includes('بدء جلسة جديدة') || text.includes('START REPLAY')) {
-        initReplaySystem(M5, I5);
-    }
-    if (text.includes('شمعة تالية') || text.includes('NEXT CANDLE')) {
-        nextReplayCandle();
-    }
+    // نظام التدريب (تم تصحيح الآيدي إلى #replay)
+    if (text.includes('بدء جلسة جديدة') || text.includes('START REPLAY')) initReplaySystem(M5, I5);
+    if (text.includes('شمعة تالية') || text.includes('NEXT CANDLE')) nextReplayCandle();
+    
     if (text === 'BUY' || text === 'شراء') {
-        if (btn.closest('#replayContent') || btn.closest('.replay-section')) executeReplayTrade('BUY');
+        if (btn.closest('#replay')) executeReplayTrade('BUY');
     }
     if (text === 'SELL' || text === 'بيع') {
-        if (btn.closest('#replayContent') || btn.closest('.replay-section')) executeReplayTrade('SELL');
+        if (btn.closest('#replay')) executeReplayTrade('SELL');
     }
 });
 
-// دوال العرض
-function renderBacktestResults(btn, res) {
-    let resBox = $('btDynamicResults');
-    if (!resBox) {
-        resBox = document.createElement('div');
-        resBox.id = 'btDynamicResults';
-        resBox.className = 'mt-4 bg-card border border-panel rounded p-4';
-        btn.parentNode.appendChild(resBox);
+// حقن النتائج بالعناصر الأصلية للـ HTML
+function renderBacktestResults(res) {
+    if($('btNet')) {
+        $('btNet').textContent = (res.netProfit>=0?'+':'') + '$' + res.netProfit.toFixed(2);
+        $('btNet').className = res.netProfit>=0 ? 'text-buy font-bold' : 'text-sell font-bold';
     }
-    resBox.innerHTML = `
-        <h3 class="text-gold text-sm font-bold mb-3 border-b border-panel pb-2">النتائج الدقيقة</h3>
-        <div class="grid grid-cols-2 gap-4 text-center text-sm">
-            <div><span class="text-muted text-xs block">صافي الربح</span><span class="font-bold ${res.netProfit>=0?'text-buy':'text-sell'}">${res.netProfit>=0?'+':''}$${res.netProfit.toFixed(2)}</span></div>
-            <div><span class="text-muted text-xs block">نسبة النجاح</span><span class="font-bold text-gold">${res.winRate}%</span></div>
-            <div><span class="text-muted text-xs block">عدد الصفقات</span><span class="font-bold">${res.totalTrades}</span></div>
-            <div><span class="text-muted text-xs block">أقصى تراجع</span><span class="font-bold text-sell">-${res.maxDrawdownPct}%</span></div>
-        </div>`;
+    if($('btWR')) $('btWR').textContent = res.winRate + '%';
+    if($('btTrades')) $('btTrades').textContent = res.totalTrades;
+    if($('btDD')) $('btDD').textContent = '-' + res.maxDrawdownPct + '%';
 }
 
-function renderLabResults(btn, res) {
-    let labBox = $('labDynamicResults');
-    if (!labBox) {
-        labBox = document.createElement('div');
-        labBox.id = 'labDynamicResults';
-        labBox.className = 'mt-4 grid grid-cols-3 gap-2 text-center text-xs';
-        btn.parentNode.appendChild(labBox);
-    }
-    const makeCard = (title, r) => `
-      <div class="bg-panel border border-panel rounded p-2">
-        <div class="text-muted font-bold mb-2">${title}</div>
-        <div class="mb-1 text-muted">WinRate: ${r.winRate}%</div>
-        <div class="font-bold text-sm ${r.netProfit>=0?'text-buy':'text-sell'}">${r.netProfit>=0?'+':''}$${r.netProfit.toFixed(0)}</div>
-      </div>`;
-    labBox.innerHTML = makeCard('A (كلاسيك)', res.A) + makeCard('B (عنيف)', res.B) + makeCard('C (قناص)', res.C);
+function renderLabResults(res) {
+    if($('labNetA')) { $('labNetA').textContent = (res.A.netProfit>=0?'+':'') + '$' + res.A.netProfit.toFixed(0); $('labNetA').className = res.A.netProfit>=0 ? 'text-buy' : 'text-sell'; }
+    if($('labWrA')) $('labWrA').textContent = res.A.winRate + '%';
+
+    if($('labNetB')) { $('labNetB').textContent = (res.B.netProfit>=0?'+':'') + '$' + res.B.netProfit.toFixed(0); $('labNetB').className = res.B.netProfit>=0 ? 'text-buy' : 'text-sell'; }
+    if($('labWrB')) $('labWrB').textContent = res.B.winRate + '%';
+
+    if($('labNetC')) { $('labNetC').textContent = (res.C.netProfit>=0?'+':'') + '$' + res.C.netProfit.toFixed(0); $('labNetC').className = res.C.netProfit>=0 ? 'text-buy' : 'text-sell'; }
+    if($('labWrC')) $('labWrC').textContent = res.C.winRate + '%';
 }
 
 function startLiveStream() {
