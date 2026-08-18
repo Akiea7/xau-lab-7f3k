@@ -39,13 +39,22 @@ export function runProfessionalBacktest(data, indicators, options) {
             let reason = '';
 
             // تطبيق السبريد والانزلاق على الإغلاق
+            
+            let hitSL = false, hitTP = false;
             if (openTrade.side === 'BUY') {
-                if (bar.l <= openTrade.sl) { exitPrice = openTrade.sl - slippage; reason = 'Hit SL'; }
-                else if (bar.h >= openTrade.tp) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
+                if (bar.l <= openTrade.sl) hitSL = true;
+                if (bar.h >= openTrade.tp) hitTP = true;
             } else {
-                if (bar.h + spread >= openTrade.sl) { exitPrice = openTrade.sl + slippage; reason = 'Hit SL'; }
-                else if (bar.l + spread <= openTrade.tp) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
+                if (bar.h + spread >= openTrade.sl) hitSL = true;
+                if (bar.l + spread <= openTrade.tp) hitTP = true;
             }
+
+            // السياسة المحافظة: إذا ضرب الهدف والوقف بنفس الشمعة، نعتبر الوقف انضرب أولاً
+            if (hitSL && hitTP) hitTP = false;
+
+            if (hitSL) { exitPrice = openTrade.side==='BUY'? openTrade.sl - slippage : openTrade.sl + slippage; reason = 'Hit SL'; }
+            else if (hitTP) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
+
 
             // الإغلاق الإجباري في نهاية البيانات
             if (!exitPrice && i === data.length - 1) {
