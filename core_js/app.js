@@ -131,7 +131,8 @@ function startLiveStream() {
         },
         (tick) => {
             // تحويل آمن للأرقام لمنع الـ NaN
-            const bid = Number(tick.bid || 0);
+            const bid = Number(tick.bid || tick.price || 0);
+            if (isNaN(bid) || bid <= 0) return;
             const ask = Number(tick.ask || 0);
             if (bid === 0) return; // تجاهل التكات الفارغة
             
