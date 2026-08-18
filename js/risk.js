@@ -1,26 +1,36 @@
 /**
- * 🛡️ مدير المخاطر وحساب حجم العقود
+ * 🛡️ مدير المخاطر الاحترافي (Advanced Risk Manager)
+ * يدعم قيود اللوت، السبريد، والعمولات
  */
-const CONTRACT_SIZE = 100; // عقد الذهب القياسي (1 لوت = 100 أونصة)
+const DEFAULT_SETTINGS = {
+    contractSize: 100, // 1 لوت = 100 أونصة
+    minLot: 0.01,
+    maxLot: 100.0,
+    lotStep: 0.01,
+    commissionPerLot: 7.00 // 7 دولار عمولة لكل لوت ستاندرد
+};
 
-export function calculatePosition(balance, riskPct, entry, sl) {
-    if (!entry || !sl || entry === sl) return 0.01;
+export function calculatePosition(balance, riskPct, entry, sl, settings = DEFAULT_SETTINGS) {
+    if (!entry || !sl || entry === sl) return settings.minLot;
     
-    // حساب المبلغ المخاطر به بالدولار
     const riskAmount = balance * (riskPct / 100);
-    
-    // حساب مسافة الوقف
     const slDistance = Math.abs(entry - sl);
     
-    // حساب حجم اللوت (Lot)
-    let lots = riskAmount / (slDistance * CONTRACT_SIZE);
+    // الحساب الأولي للوت
+    let lots = riskAmount / (slDistance * settings.contractSize);
     
-    // توحيد اللوت (أقل لوت 0.01، وتدوير لمنزلتين عشريتين)
-    lots = Math.max(0.01, Math.round(lots * 100) / 100);
-    return lots;
+    // تقريب اللوت حسب الخطوة المسموحة (Lot Step)
+    const invStep = 1 / settings.lotStep;
+    lots = Math.round(lots * invStep) / invStep;
+    
+    // الالتزام بالحد الأدنى والأقصى للوت
+    return Math.max(settings.minLot, Math.min(settings.maxLot, lots));
 }
 
-export function calculatePnL(entry, exit, side, lots) {
+export function calculatePnL(entry, exit, side, lots, settings = DEFAULT_SETTINGS) {
     const diff = side === 'BUY' ? (exit - entry) : (entry - exit);
-    return diff * lots * CONTRACT_SIZE;
+    const grossPnL = diff * lots * settings.contractSize;
+    const totalCommission = lots * settings.commissionPerLot;
+    
+    return grossPnL - totalCommission;
 }

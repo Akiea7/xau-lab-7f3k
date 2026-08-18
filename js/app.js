@@ -52,7 +52,7 @@ document.addEventListener('click', (e) => {
         const original = btn.innerHTML;
         btn.innerText = 'جاري الحساب... ⏳';
         setTimeout(() => {
-            const res = runProfessionalBacktest(M5, I5, { balance: 10000, riskPct: 1.0, rr: 2.0 });
+            const res = runProfessionalBacktest(M5, I5, { balance: 10000, riskPct: 1.0, rr: 2.0, maxTradesPerDay: 4, spread: 0.30, slippage: 0.10, commissionPerLot: 7.00, contractSize: 100 });
             renderBacktestResults(res);
             btn.innerHTML = original;
         }, 100);

@@ -1,11 +1,17 @@
 import { detectSignal } from './engine.js';
 import { calculatePosition, calculatePnL } from './risk.js';
 
-/**
- * 📊 محرك الاختبار الاحترافي (Professional Backtester)
- */
 export function runProfessionalBacktest(data, indicators, options) {
-    let { balance = 10000, riskPct = 1.0, rr = 2.0 } = options;
+    let { 
+        balance = 10000, 
+        riskPct = 1.0, 
+        rr = 2.0, 
+        maxTradesPerDay = 4, 
+        spread = 0.30,      // 30 سنت سبريد للذهب
+        slippage = 0.10,    // 10 سنت انزلاق سعري
+        commissionPerLot = 7.00,
+        contractSize = 100
+    } = options;
     
     let initialBalance = balance;
     let peakEquity = balance;
@@ -13,32 +19,42 @@ export function runProfessionalBacktest(data, indicators, options) {
     
     let trades = [];
     let openTrade = null;
+    
+    let dailyTradeCount = 0;
+    let currentDay = null;
 
     for (let i = 50; i < data.length; i++) {
         const bar = data[i];
+
+        // تتبع الأيام لتصفير عداد الصفقات اليومي
+        const barDate = new Date(bar.t).toDateString();
+        if (barDate !== currentDay) {
+            currentDay = barDate;
+            dailyTradeCount = 0;
+        }
 
         // 1. إدارة الصفقة المفتوحة
         if (openTrade) {
             let exitPrice = null;
             let reason = '';
 
-            // فحص ضرب الهدف أو الوقف باستخدام الـ High و Low للشمعة
+            // تطبيق السبريد والانزلاق على الإغلاق
             if (openTrade.side === 'BUY') {
-                if (bar.l <= openTrade.sl) { exitPrice = openTrade.sl; reason = 'Hit SL'; }
+                if (bar.l <= openTrade.sl) { exitPrice = openTrade.sl - slippage; reason = 'Hit SL'; }
                 else if (bar.h >= openTrade.tp) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
             } else {
-                if (bar.h >= openTrade.sl) { exitPrice = openTrade.sl; reason = 'Hit SL'; }
-                else if (bar.l <= openTrade.tp) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
+                if (bar.h + spread >= openTrade.sl) { exitPrice = openTrade.sl + slippage; reason = 'Hit SL'; }
+                else if (bar.l + spread <= openTrade.tp) { exitPrice = openTrade.tp; reason = 'Hit TP'; }
             }
 
             // الإغلاق الإجباري في نهاية البيانات
             if (!exitPrice && i === data.length - 1) {
-                exitPrice = bar.c;
+                exitPrice = openTrade.side === 'BUY' ? bar.c : (bar.c + spread);
                 reason = 'End of Data';
             }
 
             if (exitPrice) {
-                const pnl = calculatePnL(openTrade.entry, exitPrice, openTrade.side, openTrade.lots);
+                const pnl = calculatePnL(openTrade.actualEntry, exitPrice, openTrade.side, openTrade.lots, { contractSize, commissionPerLot });
                 balance += pnl;
                 
                 openTrade.exit = exitPrice;
@@ -49,7 +65,6 @@ export function runProfessionalBacktest(data, indicators, options) {
                 
                 openTrade = null;
 
-                // تحديث التراجع الأقصى (Max Drawdown)
                 if (balance > peakEquity) {
                     peakEquity = balance;
                 } else {
@@ -57,39 +72,43 @@ export function runProfessionalBacktest(data, indicators, options) {
                     if (dd > maxDrawdownPct) maxDrawdownPct = dd;
                 }
             }
-            continue; // نمنع فتح صفقة جديدة وهناك صفقة مفتوحة (يحل مشكلة تكرار الإشارة)
+            continue;
         }
 
-        // 2. البحث عن إشارة جديدة (فقط إذا لم تكن هناك صفقة مفتوحة)
+        // 2. البحث عن إشارة جديدة
+        if (dailyTradeCount >= maxTradesPerDay) continue; // تطبيق الحد اليومي
+
         const signal = detectSignal(data, indicators, i, { rr });
         if (signal) {
-            const lots = calculatePosition(balance, riskPct, signal.entry, signal.sl);
+            // تطبيق السبريد والانزلاق على الدخول
+            let actualEntry = signal.side === 'BUY' ? (signal.entry + spread + slippage) : (signal.entry - slippage);
+
+            const lots = calculatePosition(balance, riskPct, actualEntry, signal.sl, { contractSize, minLot: 0.01, maxLot: 100, lotStep: 0.01 });
+            
             openTrade = {
                 id: trades.length + 1,
                 openTime: bar.t,
                 side: signal.side,
-                entry: signal.entry,
+                signalEntry: signal.entry,
+                actualEntry: actualEntry,
                 sl: signal.sl,
                 tp: signal.tp,
                 lots: lots,
-                riskAmount: balance * (riskPct / 100),
                 setup: signal.reason
             };
+            
+            dailyTradeCount++;
         }
     }
 
-    // 3. تجميع الإحصائيات (Metrics)
     const wins = trades.filter(t => t.pnl > 0);
     const losses = trades.filter(t => t.pnl <= 0);
     const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0;
-    const netProfit = balance - initialBalance;
-    const netPct = (netProfit / initialBalance) * 100;
 
     return {
         initialBalance,
         finalBalance: balance,
-        netProfit,
-        netPct,
+        netProfit: balance - initialBalance,
         totalTrades: trades.length,
         wins: wins.length,
         losses: losses.length,
