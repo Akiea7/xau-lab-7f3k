@@ -1,103 +1,119 @@
-export function initReplay(bars, drawCandles, buildInd) {
-   const btnStart = document.getElementById('btnStartReplay');
-   const setupDiv = document.getElementById('replaySetup');
-   const activeDiv = document.getElementById('replayActive');
-   const chartDiv = document.getElementById('chartReplay');
-   const btnBuy = document.getElementById('btnRepBuy');
-   const btnSell = document.getElementById('btnRepSell');
-   const resDiv = document.getElementById('replayResult');
+import { calculatePosition, calculatePnL } from './risk.js';
+import { drawCandles } from './chart.js';
 
-   if(!btnStart) return;
+let rData = [], rInd = [];
+let state = {
+    active: false,
+    index: 100, // نبدأ بعد فترة التحمية
+    balance: 10000,
+    openTrade: null,
+    history: []
+};
 
-   let currentIndex = 0;
-   let sessionBars = [];
-   let virtualTrade = null;
+/**
+ * 🎬 تهيئة جلسة المحاكاة
+ */
+export function initReplaySystem(data, indicators) {
+    rData = data;
+    rInd = indicators;
+    
+    // اختيار نقطة عشوائية للبدء (بعيداً عن البداية والنهاية)
+    const minIdx = 100;
+    const maxIdx = Math.floor(data.length * 0.7);
+    state.index = Math.floor(Math.random() * (maxIdx - minIdx + 1)) + minIdx;
+    
+    state.balance = 10000;
+    state.openTrade = null;
+    state.history = [];
+    state.active = true;
 
-   // زر الشمعة التالية
-   let btnNext = document.getElementById('btnRepNext');
-   if(!btnNext) {
-       btnNext = document.createElement('button');
-       btnNext.id = 'btnRepNext';
-       btnNext.className = "w-full bg-[#38bdf8] text-white font-bold py-3 rounded text-sm hover:bg-[#0284c7] shadow-[0_0_10px_rgba(56,189,248,0.3)] hidden mt-2";
-       btnNext.innerText = "شمعة تالية ⏭";
-       activeDiv.insertBefore(btnNext, resDiv);
-   }
+    drawReplayChart();
+    alert('🎬 بدأت جلسة المحاكاة! أنت الآن في نقطة زمنية عشوائية من الماضي.');
+}
 
-   const renderChart = () => {
-       let I = buildInd(sessionBars);
-       drawCandles(chartDiv, sessionBars, I, 130, 0, [], null, null);
-   };
+/**
+ * ⏭️ التقدم شمعة واحدة للمستقبل
+ */
+export function nextReplayCandle() {
+    if (!state.active || state.index >= rData.length - 1) return;
+    state.index++;
+    
+    const bar = rData[state.index];
+    
+    // فحص الصفقات المفتوحة مع حركة الشمعة الجديدة
+    if (state.openTrade) {
+        let exitPrice = null;
+        let reason = '';
+        
+        if (state.openTrade.side === 'BUY') {
+            if (bar.l <= state.openTrade.sl) { exitPrice = state.openTrade.sl; reason = 'Hit SL 🔴'; }
+            else if (bar.h >= state.openTrade.tp) { exitPrice = state.openTrade.tp; reason = 'Hit TP 🟢'; }
+        } else {
+            if (bar.h >= state.openTrade.sl) { exitPrice = state.openTrade.sl; reason = 'Hit SL 🔴'; }
+            else if (bar.l <= state.openTrade.tp) { exitPrice = state.openTrade.tp; reason = 'Hit TP 🟢'; }
+        }
 
-   btnStart.onclick = () => {
-       setupDiv.classList.add('hidden');
-       activeDiv.classList.remove('hidden');
-       resDiv.classList.add('hidden');
-       btnBuy.classList.remove('hidden');
-       btnSell.classList.remove('hidden');
-       btnNext.classList.add('hidden');
-       virtualTrade = null;
-       
-       // اختيار نقطة بالماضي (ترك مسافة 200 شمعة للرسم و50 للمستقبل)
-       currentIndex = Math.floor(Math.random() * (bars.length - 250)) + 200;
-       sessionBars = bars.slice(0, currentIndex);
-       renderChart();
-   };
+        if (exitPrice) {
+            const pnl = calculatePnL(state.openTrade.entry, exitPrice, state.openTrade.side, state.openTrade.lots);
+            state.balance += pnl;
+            state.history.push({...state.openTrade, exit: exitPrice, pnl, reason});
+            state.openTrade = null;
+            alert(`تم إغلاق الصفقة: ${reason}\nالربح/الخسارة: $${pnl.toFixed(2)}\nالرصيد الحالي: $${state.balance.toFixed(2)}`);
+        }
+    }
+    
+    drawReplayChart();
+}
 
-   const openTrade = (side) => {
-       let lastBar = sessionBars[sessionBars.length - 1];
-       let I = buildInd(sessionBars);
-       let atr = (I && I.length > 0 && I[I.length-1].atr) ? I[I.length-1].atr : 2.5;
+/**
+ * ⚡ تنفيذ صفقة وهمية داخل المحاكي
+ */
+export function executeReplayTrade(side) {
+    if (!state.active) return alert('⚠️ يرجى بدء جلسة محاكاة أولاً!');
+    if (state.openTrade) return alert('⚠️ لديك صفقة مفتوحة بالفعل! انتظر حتى تُغلق.');
 
-       let slDist = atr * 1.5;
-       let tpDist = atr * 2.0;
+    const bar = rData[state.index];
+    const ind = rInd[state.index];
+    
+    // استخدام ATR لتحديد الأهداف والوقوف، أو قيم ثابتة إذا لم يتوفر
+    const atr = (ind && ind.atr) ? ind.atr : 2.0;
 
-       virtualTrade = {
-           side: side,
-           entry: lastBar.c,
-           sl: side === 'BUY' ? lastBar.c - slDist : lastBar.c + slDist,
-           tp: side === 'BUY' ? lastBar.c + tpDist : lastBar.c - tpDist
-       };
+    let sl, tp;
+    if (side === 'BUY') {
+        sl = bar.c - (atr * 1.5);
+        tp = bar.c + (atr * 3.0);
+    } else {
+        sl = bar.c + (atr * 1.5);
+        tp = bar.c - (atr * 3.0);
+    }
 
-       resDiv.classList.remove('hidden');
-       resDiv.className = `mt-4 text-xs font-bold p-3 rounded border bg-[#171C29] text-slate-300 border-[#1F2637]`;
-       resDiv.innerHTML = `🛒 صفقة وهمية (${side}) @ ${virtualTrade.entry.toFixed(2)} <br> SL: <span class="text-sell">${virtualTrade.sl.toFixed(2)}</span> | TP: <span class="text-buy">${virtualTrade.tp.toFixed(2)}</span>`;
+    // حساب اللوت بناءً على المخاطرة (1%)
+    const lots = calculatePosition(state.balance, 1.0, bar.c, sl);
 
-       btnBuy.classList.add('hidden');
-       btnSell.classList.add('hidden');
-       btnNext.classList.remove('hidden');
-   };
+    state.openTrade = {
+        side,
+        entry: bar.c,
+        sl,
+        tp,
+        lots,
+        time: bar.t
+    };
+    
+    alert(`✅ تم فتح صفقة ${side}\nالدخول: ${bar.c}\nاللوت: ${lots}\nالوقف: ${sl.toFixed(2)}\nالهدف: ${tp.toFixed(2)}`);
+    drawReplayChart();
+}
 
-   btnNext.onclick = () => {
-       if(currentIndex < bars.length - 1 && virtualTrade) {
-           currentIndex++;
-           sessionBars.push(bars[currentIndex]);
-           renderChart();
-
-           let bar = bars[currentIndex];
-           let isHitTP = false, isHitSL = false;
-
-           if (virtualTrade.side === 'BUY') {
-               if (bar.l <= virtualTrade.sl) isHitSL = true;
-               else if (bar.h >= virtualTrade.tp) isHitTP = true;
-           } else {
-               if (bar.h >= virtualTrade.sl) isHitSL = true;
-               else if (bar.l <= virtualTrade.tp) isHitTP = true;
-           }
-
-           if(isHitTP || isHitSL) {
-               btnNext.classList.add('hidden');
-               resDiv.className = `mt-4 text-sm font-bold p-3 rounded border ${isHitTP ? 'bg-green-900/30 text-green-400 border-green-800' : 'bg-red-900/30 text-red-400 border-red-800'}`;
-               resDiv.innerHTML = `النتيجة: ${isHitTP ? '✅ ضرب الهدف (TP)' : '❌ ضرب الستوب (SL)'} <br> السعر الحالي: ${bar.c.toFixed(2)}`;
-               
-               setTimeout(() => {
-                   setupDiv.classList.remove('hidden');
-                   activeDiv.classList.add('hidden');
-                   btnStart.innerText = "جلسة تدريب أخرى ▶";
-               }, 4000);
-           }
-       }
-   };
-
-   btnBuy.onclick = () => openTrade('BUY');
-   btnSell.onclick = () => openTrade('SELL');
+/**
+ * 📈 رسم الشارت المقطوع (إخفاء المستقبل)
+ */
+function drawReplayChart() {
+    const chartDiv = document.getElementById('chartMain');
+    if (chartDiv && rData.length > 0) {
+        // اقتطاع البيانات من البداية وحتى المؤشر الحالي فقط
+        const currentData = rData.slice(0, state.index + 1);
+        const currentInd = rInd.slice(0, state.index + 1);
+        
+        // تمرير الصفقة المفتوحة لرسم خطوطها على الشارت (إذا كانت دالة الرسم تدعم ذلك)
+        drawCandles(chartDiv, currentData, currentInd, 130, 0, [], state.openTrade, null);
+    }
 }
