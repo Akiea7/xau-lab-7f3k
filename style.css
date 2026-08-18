@@ -1,0 +1,34 @@
+:root {
+    --bg-main: #080B12;
+    --bg-card: #10151F;
+    --bg-panel: #151B27;
+    --border-color: #232C3D;
+    
+    --color-gold: #F0B90B;
+    --color-green: #22C55E;
+    --color-red: #EF4444;
+    --color-purple: #A855F7;
+    --color-blue: #38BDF8;
+    
+    --text-main: #E5E7EB;
+    --text-muted: #94A3B8;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* فئات الألوان الموحدة */
+.bg-card { background-color: var(--bg-card); }
+.bg-panel { background-color: var(--bg-panel); }
+.border-panel { border-color: var(--border-color); }
+
+.text-gold { color: var(--color-gold); }
+.text-buy { color: var(--color-green); }
+.text-sell { color: var(--color-red); }
+.text-muted { color: var(--text-muted); }
+
+/* تحسينات عامة */
+.hide { display: none !important; }
